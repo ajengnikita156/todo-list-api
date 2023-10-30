@@ -2,9 +2,9 @@ package routes
 
 import (
 	"fmt"
-	"membuatuser/controller"
-	"membuatuser/db"
-	middleware "membuatuser/middleware"
+	"membuattodo/controller"
+	"membuattodo/db"
+	middleware "membuattodo/middleware"
 	"net/http"
 	"os"
 

@@ -1,9 +1,9 @@
 package helpers
 
 import (
-	"github.com/labstack/echo/v4"
+	"membuattodo/middleware"
 
-	"membuatuser/middleware"
+	"github.com/labstack/echo/v4"
 )
 
 func ClaimToken(c echo.Context) (response middleware.JWTClaim) {

@@ -4,11 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"membuatuser/helpers"
-	"membuatuser/model"
+	"membuattodo/helpers"
+	"membuattodo/model"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
-
 )
 
 type MyClaims struct {
@@ -62,16 +62,16 @@ func CountTexts(db *sqlx.DB) echo.HandlerFunc {
 	}
 }
 
-// - API Search task (based on logged in user)
 func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) (err error) {
 		var users []model.TaskRes
-		var rows *sql.Rows
 		claims := helpers.ClaimToken(c)
 		id := claims.ID
 
 		search := c.QueryParam("search")
 		date := c.QueryParam("date")
+		hitungPage := c.QueryParam("page")
+		hitungLimit := c.QueryParam("limit")
 
 		var parseDate time.Time
 		if date != "" {
@@ -82,26 +82,48 @@ func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 			}
 		}
 
-		fmt.Println(date)
-
 		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
 
 		search = "%" + search + "%"
 
 		if !parseDate.IsZero() {
-			query += "AND date::date = $3::date"
+			query += " AND date::date = $3::date"
 		}
 
+		page, err := strconv.Atoi(hitungPage)
+		if err != nil {
+
+			page = 1
+		}
+
+		limit, err := strconv.Atoi(hitungLimit)
+		if err != nil {
+			limit = 10
+		}
+
+		offset := (page - 1) * limit
+
+		totalQuery := `SELECT COUNT(*) FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
 		if !parseDate.IsZero() {
-			rows, err = db.Query(query, id, search, parseDate)
-		} else {
-			rows, err = db.Query(query, id, search)
+			totalQuery += " AND date::date = $3::date"
 		}
-
+		var totalData int
+		err = db.Get(&totalData, totalQuery, id, search, parseDate)
 		if err != nil {
 			return err
 		}
 
+		totalPages := totalData / limit
+		if totalData%limit != 0 {
+			totalPages++
+		}
+
+		query += " LIMIT $4 OFFSET $5"
+
+		rows, err := db.Query(query, id, search, parseDate, limit, offset)
+		if err != nil {
+			return err
+		}
 		defer rows.Close()
 
 		for rows.Next() {
@@ -128,11 +150,88 @@ func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 		}
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"Message": "Success Search Tasks for User",
-			"data":    users,
+			"Message":     "Success Search Tasks for User",
+			"data":        users,
+			"page":        page,
+			"limit_page":  limit,
+			"total_Data":  totalData,
+			"total_Pages": totalPages,
 		})
 	}
 }
+
+//SEARCH API TANPA PAGINATION
+// - API Search task (based on logged in user)
+// func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
+// 	return func(c echo.Context) (err error) {
+// 		var users []model.TaskRes
+// 		var rows *sql.Rows
+// 		claims := helpers.ClaimToken(c)
+// 		id := claims.ID
+
+// 		search := c.QueryParam("search")
+// 		date := c.QueryParam("date")
+
+// 		var parseDate time.Time
+// 		if date != "" {
+// 			layout := "2006-01-02"
+// 			parseDate, err = time.Parse(layout, date)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
+
+// 		fmt.Println(date)
+
+// 		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
+
+// 		search = "%" + search + "%"
+
+// 		if !parseDate.IsZero() {
+// 			query += "AND date::date = $3::date"
+// 		}
+
+// 		if !parseDate.IsZero() {
+// 			rows, err = db.Query(query, id, search, parseDate)
+// 		} else {
+// 			rows, err = db.Query(query, id, search)
+// 		}
+
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		defer rows.Close()
+
+// 		for rows.Next() {
+// 			var user model.TaskRes
+// 			err = rows.Scan(
+// 				&user.ID,
+// 				&user.Tittle,
+// 				&user.Description,
+// 				&user.Status,
+// 				&user.Date,
+// 				&user.Image,
+// 				&user.CreatedAt,
+// 				&user.UpdatedAt,
+// 				&user.IdUser,
+// 			)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			users = append(users, user)
+// 		}
+
+// 		if len(users) == 0 {
+// 			users = []model.TaskRes{}
+// 		}
+
+// 		return c.JSON(http.StatusOK, map[string]interface{}{
+// 			"Message": "Success Search Tasks for User",
+// 			"data":    users,
+// 		})
+// 	}
+// }
 
 // - API Show task list (based on logged in user)
 func GetTasksController(db *sqlx.DB) echo.HandlerFunc {
