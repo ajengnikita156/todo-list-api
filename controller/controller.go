@@ -62,7 +62,6 @@ func CountTexts(db *sqlx.DB) echo.HandlerFunc {
 	}
 }
 
-
 // - API Search task (based on logged in user)
 func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) (err error) {
@@ -134,7 +133,6 @@ func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 		})
 	}
 }
-
 
 // - API Show task list (based on logged in user)
 func GetTasksController(db *sqlx.DB) echo.HandlerFunc {
