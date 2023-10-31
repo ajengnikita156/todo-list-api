@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
+
 )
 
 type MyClaims struct {
@@ -82,7 +83,8 @@ func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 			}
 		}
 
-		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
+		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user 
+		FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
 
 		search = "%" + search + "%"
 
@@ -241,7 +243,12 @@ func GetTasksController(db *sqlx.DB) echo.HandlerFunc {
 		id := claims.ID
 		fmt.Println(id)
 
-		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user FROM tasks WHERE id_user = $1`
+		query := `SELECT tasks.id, tasks.tittle, tasks.description, tasks.status, tasks.date, tasks.image,
+		tasks.created_at, tasks.updated_at, tasks.id_user, tasks.category_id, category.category_name
+		FROM tasks
+		LEFT JOIN category ON tasks.category_id = category.id
+		WHERE tasks.id_user = $1
+		ORDER BY tasks.id ASC`
 
 		rows, err := db.Query(query, id)
 		if err != nil {
@@ -260,6 +267,8 @@ func GetTasksController(db *sqlx.DB) echo.HandlerFunc {
 				&user.CreatedAt,
 				&user.UpdatedAt,
 				&user.IdUser,
+				&user.CategoryID,
+				&user.CategoryName,
 			)
 			if err != nil {
 				return err
@@ -411,8 +420,7 @@ func AddTaskController(db *sqlx.DB) echo.HandlerFunc {
 		}
 
 		// Generate nama file unik
-		fileName := fmt.Sprintf("%s%s", image.Filename, filepath.Ext(image.Filename))
-		dstPath := filepath.Join(uploadDir, fileName)
+		dstPath := filepath.Join(uploadDir, image.Filename)
 
 		// Membuka file tujuan untuk penyimpanan
 		dst, err := os.Create(dstPath)
@@ -427,7 +435,7 @@ func AddTaskController(db *sqlx.DB) echo.HandlerFunc {
 		}
 
 		// Membuat URL ke gambar yang diunggah
-		imageURL := "http://localhost:8090/" + dstPath
+		imageURL := "http://localhost:8090/uploads/" + image.Filename
 
 		layout := "2006-01-02 15:04"
 		parsedDate, err := time.Parse(layout, req.Date)
@@ -452,12 +460,12 @@ func AddTaskController(db *sqlx.DB) echo.HandlerFunc {
 		}
 
 		query := `
-		INSERT INTO tasks (tittle, description, status, date, image, created_at, id_user)
-		VALUES ($1, $2, $3, $4, $5, now(), $6)  
-		RETURNING id, tittle, description, status, date, image, created_at, updated_at, id_user
+		INSERT INTO tasks (tittle, description, status, date, image, created_at, id_user, category_id)
+		VALUES ($1, $2, $3, $4, $5, now(), $6, $7)  
+		RETURNING id, tittle, description, status, date, image, created_at, updated_at, id_user, category_id
 		`
-		row := db.QueryRowx(query, req.Tittle, req.Description, req.Status, parsedDate, imageURL, id)
-		err = row.Scan(&user.ID, &user.Tittle, &user.Description, &user.Status, &user.Date, &user.Image, &user.CreatedAt, &user.UpdatedAt, &user.IdUser)
+		row := db.QueryRowx(query, req.Tittle, req.Description, req.Status, parsedDate, imageURL, id, req.CategoryID)
+		err = row.Scan(&user.ID, &user.Tittle, &user.Description, &user.Status, &user.Date, &user.Image, &user.CreatedAt, &user.UpdatedAt, &user.IdUser, &user.CategoryID)
 		if err != nil {
 			return err
 		}
@@ -687,4 +695,139 @@ func LogoutController(db *sqlx.DB) echo.HandlerFunc {
 		})
 	}
 
+}
+
+
+
+//KATEGORI API
+//GET KATEGORI
+func GetKategoriController(db *sqlx.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var kategoris []model.Kategori
+
+		query := `SELECT id, category_name, created_at, updated_at FROM category`
+
+		rows, err := db.Query(query)
+		if err != nil {
+			return err
+		}
+
+		for rows.Next() {
+			var kategori model.Kategori
+			err = rows.Scan(
+				&kategori.ID,
+				&kategori.CategoryName,
+				&kategori.CreatedAt,
+				&kategori.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+			kategoris = append(kategoris, kategori)
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"Message": "Success Get Data category By User Login",
+			"data":    kategoris,
+		})
+	}
+}
+
+//KATEGORI POST 
+func AddKategoriController(db *sqlx.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var req model.KategoriReq
+		var kategori model.Kategori
+		err := c.Bind(&req)
+		if err != nil {
+			return err
+		}
+
+		validate := validator.New()
+		err = validate.Struct(req)
+		if err != nil {
+			var errorMessage []string
+			validationErrors := err.(validator.ValidationErrors)
+			for _, err := range validationErrors {
+				errorMessage = append(errorMessage, err.Error())
+			}
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"message": errorMessage,
+			})
+		}
+
+		query := `
+		INSERT INTO category (category_name, created_at)
+		VALUES ($1, now())  
+		RETURNING id, category_name, created_at, updated_at`
+
+		row := db.QueryRowx(query, req.CategoryName)
+		err = row.Scan(&kategori.ID, &kategori.CategoryName, &kategori.CreatedAt, &kategori.UpdatedAt)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"Message": "Successfully Added New category Data",
+			"data":    kategori,
+		})
+	}
+}
+
+//KATEGORI PUT
+func EditKategoriController(db *sqlx.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		kategoriID := c.Param("id")
+		var request model.KategoriReq
+		var kategori model.Kategori
+		err := c.Bind(&request)
+
+		if err != nil {
+			return err
+		}
+
+		validate := validator.New()
+		err = validate.Struct(request)
+		if err != nil {
+			var errormessages []string
+			validationErrors := err.(validator.ValidationErrors)
+			for _, err := range validationErrors {
+				errormessages = append(errormessages, err.Error())
+			}
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"message": errormessages,
+			})
+		}
+
+		query := `UPDATE category SET category_name = $1, updated_at = now() WHERE id = $2
+				RETURNING id, category_name, created_at, updated_at `
+
+				row := db.QueryRowx(query, request.CategoryName, kategoriID)
+				err = row.Scan(&kategori.ID, &kategori.CategoryName, &kategori.CreatedAt, &kategori.UpdatedAt)
+				if err != nil {
+					return err
+				}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"Message": "Successfully edited Data ",
+			"data":    kategori,
+		})
+	}
+}
+
+//KATEGORI DELETE
+func DeleteKategoriController(db *sqlx.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		kategoriID := c.Param("id")
+
+		query := "DELETE FROM category WHERE id = $1"
+		_, err := db.Exec(query, kategoriID)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"message": "Task Data Deleted Successfully",
+		})
+	}
 }

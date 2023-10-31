@@ -31,6 +31,9 @@ func Init() error {
 
 	task.Use(middleware.ValidateToken)
 
+	//inith buat gambar
+	e.Static("/uploads", "/uploads")
+
 	task.GET("", controller.GetTasksController(db)) //=>untuk mengirimkan db
 	task.GET("/:id", controller.GetTaskByIDController(db))
 	task.POST("/add", controller.AddTaskController(db))
@@ -42,5 +45,9 @@ func Init() error {
 	task.DELETE("/:id", controller.DeleteTaskController(db))
 	task.DELETE("", controller.BulkDeleteController(db))
 	task.GET("/status", controller.CountTexts(db))
+	task.GET("/kategori", controller.GetKategoriController(db))
+	task.POST("/kategori/add", controller.AddKategoriController(db))
+	task.PUT("/edit/:id", controller.EditKategoriController(db))
+	task.DELETE("/delete/:id", controller.DeleteKategoriController(db))
 	return e.Start(fmt.Sprintf(":%s", os.Getenv("SERVER_PORT")))
 }
