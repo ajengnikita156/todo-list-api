@@ -10,6 +10,7 @@ type TaskReq struct {
 	Status      string `form:"status"`
 	Date        string `form:"date"`
 	CategoryID  int    `form:"category_id"`
+	Important   bool   `form:"important"`
 }
 
 type TaskRes struct {
@@ -24,6 +25,7 @@ type TaskRes struct {
 	IdUser       int        `json:"id_user"`
 	CategoryID   *int       `json:"category_id"`
 	CategoryName *string    `json:"category_name"`
+	Important    *bool      `json:"important"`
 }
 
 type TaskFull struct {

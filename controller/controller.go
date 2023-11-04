@@ -17,7 +17,6 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
-
 )
 
 type MyClaims struct {
@@ -66,66 +65,72 @@ func CountTexts(db *sqlx.DB) echo.HandlerFunc {
 func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) (err error) {
 		var users []model.TaskRes
-		claims := helpers.ClaimToken(c)
-		id := claims.ID
-
-		search := c.QueryParam("search")
+		Claims := helpers.ClaimToken(c)
+		id := Claims.ID
+		keywoard := c.QueryParam("search")
 		date := c.QueryParam("date")
-		hitungPage := c.QueryParam("page")
-		hitungLimit := c.QueryParam("limit")
-
-		var parseDate time.Time
+		HitungPage := c.QueryParam("page")
+		HitungLimit := c.QueryParam("limit")
+		var parsedDate time.Time
 		if date != "" {
 			layout := "2006-01-02"
-			parseDate, err = time.Parse(layout, date)
+			parsedDate, err = time.Parse(layout, date)
 			if err != nil {
 				return err
 			}
 		}
 
-		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user 
-		FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
+		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user FROM tasks WHERE id_user = $1`
+		keywoard = "%" + keywoard + "%"
 
-		search = "%" + search + "%"
-
-		if !parseDate.IsZero() {
-			query += " AND date::date = $3::date"
+		if !parsedDate.IsZero() {
+			query += fmt.Sprintf(" AND date::date = '%s'", parsedDate.Format("2006-01-02"))
 		}
 
-		page, err := strconv.Atoi(hitungPage)
-		if err != nil {
+		if keywoard != "" {
+			query += fmt.Sprintf(" AND (tittle ILIKE '%s' OR description ILIKE '%s')", keywoard, keywoard)
+		}
 
+		page, err := strconv.Atoi(HitungPage)
+		if err != nil {
 			page = 1
 		}
 
-		limit, err := strconv.Atoi(hitungLimit)
+		limit, err := strconv.Atoi(HitungLimit)
 		if err != nil {
 			limit = 10
 		}
-// atoi(string ke int) itoa (int ke string)
+
 		offset := (page - 1) * limit
 
-		totalQuery := `SELECT COUNT(*) FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
-		if !parseDate.IsZero() {
-			totalQuery += " AND date::date = $3::date"
+		totalQuery := `SELECT COUNT(*) FROM tasks WHERE id_user = $1`
+
+		if !parsedDate.IsZero() {
+			totalQuery += fmt.Sprintf(" AND date::date = '%s'", parsedDate.Format("2006-01-02"))
 		}
-		var totalData int
-		err = db.Get(&totalData, totalQuery, id, search, parseDate)
+
+		if keywoard != "" {
+			totalQuery += fmt.Sprintf(" AND (tittle ILIKE '%s' OR description ILIKE '%s')", keywoard, keywoard)
+		}
+
+		var count int
+		err = db.Get(&count, totalQuery, id)
 		if err != nil {
 			return err
 		}
 
-		totalPages := totalData / limit
-		if totalData%limit != 0 {
+		totalPages := count / limit
+		if count%limit != 0 {
 			totalPages++
 		}
 
-		query += " LIMIT $4 OFFSET $5"
+		query += " LIMIT $2 OFFSET $3"
 
-		rows, err := db.Query(query, id, search, parseDate, limit, offset)
+		rows, err := db.Query(query, id, limit, offset)
 		if err != nil {
 			return err
 		}
+
 		defer rows.Close()
 
 		for rows.Next() {
@@ -156,11 +161,110 @@ func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
 			"data":        users,
 			"page":        page,
 			"limit_page":  limit,
-			"total_data":  totalData,
+			"total_data":  count,
 			"total_pages": totalPages,
 		})
 	}
 }
+
+// func SearchTasksFormController(db *sqlx.DB) echo.HandlerFunc {
+// 	return func(c echo.Context) (err error) {
+// 		var users []model.TaskRes
+// 		claims := helpers.ClaimToken(c)
+// 		id := claims.ID
+
+// 		search := c.QueryParam("search")
+// 		date := c.QueryParam("date")
+// 		hitungPage := c.QueryParam("page")
+// 		hitungLimit := c.QueryParam("limit")
+
+// 		var parseDate time.Time
+// 		if date != "" {
+// 			layout := "2006-01-02"
+// 			parseDate, err = time.Parse(layout, date)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
+
+// 		query := `SELECT id, tittle, description, status, date, image, created_at, updated_at, id_user
+// 		FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
+
+// 		search = "%" + search + "%"
+
+// 		if !parseDate.IsZero() {
+// 			query += " AND date::date = $3::date"
+// 		}
+
+// 		page, err := strconv.Atoi(hitungPage)
+// 		if err != nil {
+
+// 			page = 1
+// 		}
+
+// 		limit, err := strconv.Atoi(hitungLimit)
+// 		if err != nil {
+// 			limit = 10
+// 		}
+// // atoi(string ke int) itoa (int ke string)
+// 		offset := (page - 1) * limit
+
+// 		totalQuery := `SELECT COUNT(*) FROM tasks WHERE id_user = $1 AND (tittle ILIKE $2 OR description ILIKE $2)`
+// 		if !parseDate.IsZero() {
+// 			totalQuery += " AND date::date = $3::date"
+// 		}
+// 		var totalData int
+// 		err = db.Get(&totalData, totalQuery, id, search, parseDate)
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		totalPages := totalData / limit
+// 		if totalData%limit != 0 {
+// 			totalPages++
+// 		}
+
+// 		query += " LIMIT $4 OFFSET $5"
+
+// 		rows, err := db.Query(query, id, search, parseDate, limit, offset)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		defer rows.Close()
+
+// 		for rows.Next() {
+// 			var user model.TaskRes
+// 			err = rows.Scan(
+// 				&user.ID,
+// 				&user.Tittle,
+// 				&user.Description,
+// 				&user.Status,
+// 				&user.Date,
+// 				&user.Image,
+// 				&user.CreatedAt,
+// 				&user.UpdatedAt,
+// 				&user.IdUser,
+// 			)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			users = append(users, user)
+// 		}
+
+// 		if len(users) == 0 {
+// 			users = []model.TaskRes{}
+// 		}
+
+// 		return c.JSON(http.StatusOK, map[string]interface{}{
+// 			"Message":     "Success Search Tasks for User",
+// 			"data":        users,
+// 			"page":        page,
+// 			"limit_page":  limit,
+// 			"total_data":  totalData,
+// 			"total_pages": totalPages,
+// 		})
+// 	}
+// }
 
 // - API Show task list (based on logged in user)
 func GetTasksController(db *sqlx.DB) echo.HandlerFunc {
@@ -321,7 +425,7 @@ func EditTaskController(db *sqlx.DB) echo.HandlerFunc {
 func AddTaskController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req model.TaskReq
-		var user model.TaskRes
+		var user model.TaskRes // change
 		err := c.Bind(&req)
 		if err != nil {
 			return err
@@ -362,7 +466,7 @@ func AddTaskController(db *sqlx.DB) echo.HandlerFunc {
 		}
 
 		// Membuat URL ke gambar yang diunggah
-		imageURL := "http://localhost:8090/uploads/" + image.Filename
+		imageURL := "http://localhost:8080/uploads/" + image.Filename
 
 		layout := "2006-01-02 15:04"
 		parsedDate, err := time.Parse(layout, req.Date)
@@ -385,27 +489,27 @@ func AddTaskController(db *sqlx.DB) echo.HandlerFunc {
 				"message": errorMessage,
 			})
 		}
-
+		fmt.Println(req)
 		query := `
-		INSERT INTO tasks (tittle, description, status, date, image, created_at, id_user, category_id)
-		VALUES ($1, $2, $3, $4, $5, now(), $6, $7)  
-		RETURNING id, tittle, description, status, date, image, created_at, updated_at, id_user, category_id
+		INSERT INTO tasks (tittle, description, status, date, image, created_at, id_user, category_id, important)
+		VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8)  
+		RETURNING id, tittle, description, status, date, image, created_at, updated_at, id_user, category_id, important
 		`
-		row := db.QueryRowx(query, req.Tittle, req.Description, req.Status, parsedDate, imageURL, id, req.CategoryID)
-		err = row.Scan(&user.ID, &user.Tittle, &user.Description, &user.Status, &user.Date, &user.Image, &user.CreatedAt, &user.UpdatedAt, &user.IdUser, &user.CategoryID)
+		row := db.QueryRowx(query, req.Tittle, req.Description, req.Status, parsedDate, imageURL, id, req.CategoryID, req.Important)
+		err = row.Scan(&user.ID, &user.Tittle, &user.Description, &user.Status, &user.Date, &user.Image, &user.CreatedAt, &user.UpdatedAt, &user.IdUser, &user.CategoryID, &user.Important)
 		if err != nil {
 			return err
 		}
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"Message": "Successfully Added New TASK Data",
+			"message": "success add task",
 			"data":    user,
 		})
 	}
 }
 
-
 //   - API Delete a task and bulk delete   AND id_user = $2
+//
 // delete
 func DeleteTaskController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -624,8 +728,8 @@ func LogoutController(db *sqlx.DB) echo.HandlerFunc {
 
 }
 
-//KATEGORI API
-//GET KATEGORI
+// KATEGORI API
+// GET KATEGORI
 func GetKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var kategoris []model.Kategori
@@ -658,7 +762,7 @@ func GetKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	}
 }
 
-//KATEGORI POST 
+// KATEGORI POST
 func AddKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req model.KategoriReq
@@ -699,7 +803,7 @@ func AddKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	}
 }
 
-//KATEGORI PUT
+// KATEGORI PUT
 func EditKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		kategoriID := c.Param("id")
@@ -727,11 +831,11 @@ func EditKategoriController(db *sqlx.DB) echo.HandlerFunc {
 		query := `UPDATE category SET category_name = $1, updated_at = now() WHERE id = $2
 				RETURNING id, category_name, created_at, updated_at `
 
-				row := db.QueryRowx(query, request.CategoryName, kategoriID)
-				err = row.Scan(&kategori.ID, &kategori.CategoryName, &kategori.CreatedAt, &kategori.UpdatedAt)
-				if err != nil {
-					return err
-				}
+		row := db.QueryRowx(query, request.CategoryName, kategoriID)
+		err = row.Scan(&kategori.ID, &kategori.CategoryName, &kategori.CreatedAt, &kategori.UpdatedAt)
+		if err != nil {
+			return err
+		}
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"Message": "Successfully edited Data ",
@@ -740,7 +844,7 @@ func EditKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	}
 }
 
-//KATEGORI DELETE
+// KATEGORI DELETE
 func DeleteKategoriController(db *sqlx.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		kategoriID := c.Param("id")
